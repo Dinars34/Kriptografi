@@ -1,16 +1,11 @@
-"""
-S-box Analysis Web Application (UPDATED WITH PHASE 4)
-Streamlit app for S-box construction, validation, cryptographic testing, and AES encryption
-"""
-
+# Nama File: app.py
 import streamlit as st
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 import plotly.express as px
-from io import BytesIO
-import base64
+import plotly.graph_objects as go
 from PIL import Image
+from io import BytesIO
 
 # Import custom modules
 from sbox_core import SBoxConstructor, PredefinedMatrices
@@ -18,935 +13,528 @@ from sbox_validation import SBoxValidator
 from sbox_testing import SBoxCryptoTest
 from sbox_io import SBoxIO
 from aes_cipher import AESCipher, AESImageCipher, generate_key_from_password
+from encryption_stats import EncryptionStats  # Pastikan file encryption_stats.py ada di folder yang sama
 
-# Page configuration
+# ==========================================
+# 1. KONFIGURASI HALAMAN & CSS BARU
+# ==========================================
 st.set_page_config(
-    page_title="Kahvi S-box Analysis & AES Encryption Tool",
-    page_icon="🔐",
+    page_title="Cryptographic S-Box Forge",
+    page_icon="🛡️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 # Custom CSS
 st.markdown("""
 <style>
-    .main-header {
-        font-size: 2.5rem;
-        font-weight: bold;
-        color: #1f77b4;
+    [data-testid="stSidebar"] {display: none;}
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    .block-container {padding-top: 1rem; padding-bottom: 2rem;}
+    
+    .main-title {
+        font-family: 'Helvetica Neue', sans-serif;
+        font-size: 3rem;
+        font-weight: 800;
+        background: -webkit-linear-gradient(45deg, #1e3c72, #2a5298);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
         text-align: center;
-        margin-bottom: 2rem;
+        margin-bottom: 0.5rem;
     }
-    .sub-header {
-        font-size: 1.5rem;
-        font-weight: bold;
-        color: #2c3e50;
-        margin-top: 2rem;
-        margin-bottom: 1rem;
-    }
-    .success-box {
-        padding: 1rem;
-        background-color: #d4edda;
-        border: 1px solid #c3e6cb;
+    
+    .status-card {
+        background-color: #f8f9fa;
+        border-left: 5px solid #1e3c72;
+        padding: 15px;
         border-radius: 5px;
-        color: #155724;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
     }
-    .error-box {
-        padding: 1rem;
-        background-color: #f8d7da;
-        border: 1px solid #f5c6cb;
-        border-radius: 5px;
-        color: #721c24;
+    
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 24px;
+        background-color: transparent;
+        border-bottom: 2px solid #e0e0e0;
     }
-    .info-box {
-        padding: 1rem;
-        background-color: #d1ecf1;
-        border: 1px solid #bee5eb;
-        border-radius: 5px;
-        color: #0c5460;
+    
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        white-space: pre-wrap;
+        background-color: transparent;
+        border-radius: 4px 4px 0px 0px;
+        color: #4a4a4a;
+        font-weight: 600;
     }
-    .warning-box {
-        padding: 1rem;
-        background-color: #fff3cd;
-        border: 1px solid #ffeeba;
-        border-radius: 5px;
-        color: #856404;
+    
+    .stTabs [aria-selected="true"] {
+        background-color: #e3f2fd;
+        color: #1e3c72;
+        border-bottom: 3px solid #1e3c72;
+    }
+
+    .content-card {
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        border: 1px solid #e0e0e0;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        margin-bottom: 20px;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize session state
-if 'sbox' not in st.session_state:
-    st.session_state.sbox = None
-if 'sbox_name' not in st.session_state:
-    st.session_state.sbox_name = None
-if 'validation_results' not in st.session_state:
-    st.session_state.validation_results = None
-if 'test_results' not in st.session_state:
-    st.session_state.test_results = None
-if 'encrypted_text' not in st.session_state:
-    st.session_state.encrypted_text = None
-if 'encrypted_image' not in st.session_state:
-    st.session_state.encrypted_image = None
+# ==========================================
+# 2. STATE MANAGEMENT
+# ==========================================
+if 'sbox' not in st.session_state: st.session_state.sbox = None
+if 'sbox_name' not in st.session_state: st.session_state.sbox_name = None
+if 'validation_results' not in st.session_state: st.session_state.validation_results = None
+if 'test_results' not in st.session_state: st.session_state.test_results = None
+if 'encrypted_text' not in st.session_state: st.session_state.encrypted_text = None
+if 'encrypted_image' not in st.session_state: st.session_state.encrypted_image = None
 
+# ==========================================
+# 3. HELPER COMPONENTS
+# ==========================================
+def display_status_bar():
+    if st.session_state.sbox is not None:
+        st.markdown(f"""
+        <div class="status-card">
+            <div>
+                <span style="font-size: 1.2rem; font-weight: bold;">🛡️ ACTIVE ENGINE:</span>
+                <span style="font-size: 1.2rem; color: #1e3c72; margin-left: 10px;">{st.session_state.sbox_name}</span>
+            </div>
+            <div style="font-size: 0.9rem; color: #666;">Ready for Analysis & Encryption</div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div class="status-card" style="border-left: 5px solid #dc3545;">
+            <div><span style="font-size: 1.2rem; font-weight: bold; color: #dc3545;">⚠️ NO ENGINE LOADED</span></div>
+            <div style="font-size: 0.9rem;">Please construct or import an S-box in the <b>Forge</b> tab.</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# ==========================================
+# 4. MAIN APP STRUCTURE
+# ==========================================
 def main():
-    # Header
-    st.markdown('<div class="main-header">🔐 S-box Analysis & AES Encryption Tool</div>', unsafe_allow_html=True)
-    st.markdown("""
-    <div class="info-box">
-    <b>Based on:</b> "AES S-box modification uses affine matrices exploration for increased S-box strength"<br>
-    <b>Features:</b> S-box Construction | Validation | Cryptographic Testing | AES Encryption/Decryption | Import/Export
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown('<div class="main-title">A E G I S</div>', unsafe_allow_html=True)
+    st.markdown('<div style="text-align: center; color: #666; margin-bottom: 20px;">Advanced Encryption Generator & Integrated S-box System</div>', unsafe_allow_html=True)
     
-    # Sidebar
-    with st.sidebar:
-        st.image("https://unnes.ac.id/lppm/wp-content/uploads/sites/16/2015/08/Logo-Transparan-Warna-1.png", width=80)
-        st.title("Navigation")
-        
-        page = st.radio(
-            "Select Phase:",
-            ["🔷 Phase 1: Construction",
-             "🔷 Phase 2: Testing",
-             "🔷 Phase 3: Import/Export",
-             "🔷 Phase 4: Encryption"]  # NEW!
-        )
-        
-        st.markdown("---")
-        st.markdown("### Current S-box")
-        if st.session_state.sbox is not None:
-            st.success(f"✓ {st.session_state.sbox_name}")
-            
-            # Show S-box preview
-            with st.expander("Preview (first row)"):
-                st.code(str(st.session_state.sbox[0]))
-            
-            if st.button("🗑️ Clear S-box"):
-                st.session_state.sbox = None
-                st.session_state.sbox_name = None
-                st.session_state.validation_results = None
-                st.session_state.test_results = None
-                st.rerun()
-        else:
-            st.info("No S-box loaded")
-            st.markdown("💡 *Build one in Phase 1*")
+    display_status_bar()
     
-    # Main content based on selected page
-    if page == "🔷 Phase 1: Construction":
-        show_phase1_construction()
-    elif page == "🔷 Phase 2: Testing":
-        show_phase2_testing()
-    elif page == "🔷 Phase 3: Import/Export":
-        show_phase3_io()
-    elif page == "🔷 Phase 4: Encryption":
-        show_phase4_encryption()  # NEW!
+    tab_forge, tab_lab, tab_vault, tab_data = st.tabs([
+        "🔨 FORGE (Construct)", "🧪 LAB (Analyze)", "🔐 VAULT (Encrypt)", "💾 DATA (I/O)"
+    ])
+    
+    # --- TAB 1: FORGE ---
+    with tab_forge:
+        col_controls, col_preview = st.columns([1, 1.5], gap="large")
+        with col_controls:
+            st.markdown("### ⚙️ Configuration")
+            with st.container(border=True):
+                matrix_option = st.selectbox("Affine Matrix Model:",
+                    ["AES (Original)", "K4 (Paper)", "K44 (Best - Paper)", "K81 (Paper)", "K111 (Paper)", "K128 (Paper)", "Custom"])
+                
+                custom_matrix_text = ""
+                if matrix_option == "Custom":
+                    st.info("Input 8x8 binary matrix")
+                    custom_matrix_text = st.text_area("Matrix Data:", value="1 0 0 0 1 1 1 1\n" * 8, height=150)
+                
+                constant_option = st.selectbox("Constant Vector:", ["AES (0x63)", "Custom"])
+                custom_constant = "11000110"
+                if constant_option == "Custom":
+                    custom_constant = st.text_input("8-bit binary:", value="11000110")
+                
+                st.markdown("---")
+                if st.button("🚀 Build", type="primary", use_container_width=True):
+                    construct_sbox_action(matrix_option, custom_matrix_text, constant_option, custom_constant)
 
-def show_phase1_construction():
-    """Phase 1: S-box Construction"""
-    st.markdown('<div class="sub-header">🔷 Phase 1: S-box Construction</div>', unsafe_allow_html=True)
-    
-    tab1, tab2, tab3 = st.tabs(["🏗️ Build S-box", "📊 View Matrices", "✅ Validate"])
-    
-    with tab1:
-        st.markdown("### 🏗️ S-box Construction")
-        
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            # Affine matrix selection
-            matrix_option = st.selectbox(
-                "Select Affine Matrix:",
-                ["AES (Original)", "K4 (Paper)", "K44 (Best - Paper)", 
-                 "K81 (Paper)", "K111 (Paper)", "K128 (Paper)", "Custom"]
-            )
-            
-            if matrix_option == "Custom":
-                st.info("Enter custom 8×8 binary matrix (0s and 1s only)")
-                custom_matrix_text = st.text_area(
-                    "Custom Matrix (8 rows, 8 values per row):",
-                    value="1 0 0 0 1 1 1 1\n" * 8,
-                    height=200
-                )
-        
-        with col2:
-            st.markdown("#### Options")
-            constant_option = st.selectbox(
-                "8-bit Constant:",
-                ["AES (0x63)", "Custom"]
-            )
-            
-            if constant_option == "Custom":
-                custom_constant = st.text_input(
-                    "Enter 8-bit binary:",
-                    value="11000110"
-                )
-        
-        # Construct button
-        if st.button("🔨 Construct S-box", type="primary", use_container_width=True):
-            try:
-                constructor = SBoxConstructor()
+        with col_preview:
+            st.markdown("### 👁️ S-Box Preview")
+            if st.session_state.sbox is not None:
+                preview_mode1, preview_mode2 = st.tabs(["🔥 Heatmap", "🔢 S-box Generated"])
+                with preview_mode1:
+                    fig = px.imshow(st.session_state.sbox, labels=dict(x="Col", y="Row", color="Value"),
+                                   x=[str(i) for i in range(16)], y=[str(i) for i in range(16)],
+                                   color_continuous_scale="Viridis", text_auto=True)
+                    fig.update_layout(height=450, margin=dict(l=0, r=0, t=0, b=0))
+                    st.plotly_chart(fig, use_container_width=True)
                 
-                # Get affine matrix
-                if matrix_option == "AES (Original)":
-                    affine_matrix = PredefinedMatrices.get_aes_matrix()
-                    sbox_name = "AES S-box"
-                elif matrix_option == "K4 (Paper)":
-                    affine_matrix = PredefinedMatrices.get_k4()
-                    sbox_name = "S-box K4"
-                elif matrix_option == "K44 (Best - Paper)":
-                    affine_matrix = PredefinedMatrices.get_k44()
-                    sbox_name = "S-box K44"
-                elif matrix_option == "K81 (Paper)":
-                    affine_matrix = PredefinedMatrices.get_k81()
-                    sbox_name = "S-box K81"
-                elif matrix_option == "K111 (Paper)":
-                    affine_matrix = PredefinedMatrices.get_k111()
-                    sbox_name = "S-box K111"
-                elif matrix_option == "K128 (Paper)":
-                    affine_matrix = PredefinedMatrices.get_k128()
-                    sbox_name = "S-box K128"
-                else:  # Custom
-                    # Parse custom matrix
-                    rows = custom_matrix_text.strip().split('\n')
-                    affine_matrix = np.array([[int(x) for x in row.split()] for row in rows], dtype=np.uint8)
-                    sbox_name = "Custom S-box"
-                
-                # Get constant
-                if constant_option == "AES (0x63)":
-                    constant = PredefinedMatrices.get_aes_constant()
-                else:
-                    constant = np.array([[int(x) for x in custom_constant]], dtype=np.uint8).T
-                
-                # Construct S-box
-                sbox = constructor.construct_sbox(affine_matrix, constant)
-                
-                # Store in session state
-                st.session_state.sbox = sbox
-                st.session_state.sbox_name = sbox_name
-                
-                st.success(f"✅ {sbox_name} constructed successfully!")
-                st.rerun()
-                
-            except Exception as e:
-                st.error(f"❌ Error: {str(e)}")
-        
-        # Display current S-box
-        if st.session_state.sbox is not None:
-            st.markdown("---")
-            st.markdown("### 📋 Current S-box")
-            
-            # Display options
-            display_format = st.radio(
-                "Display Format:",
-                ["Decimal", "Hexadecimal", "Binary"],
-                horizontal=True
-            )
-            
-            # Convert to DataFrame for display
-            df = pd.DataFrame(st.session_state.sbox)
-            df.index = [f"Row {i}" for i in range(16)]
-            df.columns = [f"Col {i}" for i in range(16)]
-            
-            if display_format == "Hexadecimal":
-                df = df.applymap(lambda x: f"{x:02X}")
-            elif display_format == "Binary":
-                df = df.applymap(lambda x: f"{x:08b}")
-            
-            st.dataframe(df, use_container_width=True)
-    
-    with tab2:
-        st.markdown("### 📊 View Predefined Matrices")
-        
-        matrix_to_view = st.selectbox(
-            "Select Matrix:",
-            ["K_AES", "K4", "K44", "K81", "K111", "K128"]
-        )
-        
-        matrices = {
-            "K_AES": PredefinedMatrices.get_aes_matrix(),
-            "K4": PredefinedMatrices.get_k4(),
-            "K44": PredefinedMatrices.get_k44(),
-            "K81": PredefinedMatrices.get_k81(),
-            "K111": PredefinedMatrices.get_k111(),
-            "K128": PredefinedMatrices.get_k128()
-        }
-        
-        matrix = matrices[matrix_to_view]
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("#### Matrix View")
-            df = pd.DataFrame(matrix)
-            st.dataframe(df, use_container_width=True)
-        
-        with col2:
-            st.markdown("#### Matrix Properties")
-            st.write(f"**Determinant (mod 2):** {int(np.linalg.det(matrix)) % 2}")
-            st.write(f"**Rank:** {np.linalg.matrix_rank(matrix)}")
-            st.write(f"**Trace:** {np.trace(matrix)}")
-    
-    with tab3:
-        st.markdown("### ✅ Validate S-box")
-        
-        if st.session_state.sbox is None:
-            st.warning("⚠️ No S-box loaded. Please construct one first.")
-            return
-        
-        if st.button("🔍 Run Validation Tests", type="primary"):
-            with st.spinner("Running validation tests..."):
-                validator = SBoxValidator()
-                is_valid, results = validator.validate_sbox(st.session_state.sbox)
-                st.session_state.validation_results = results
-            
-            if is_valid:
-                st.success("✅ S-box is VALID (passes balance and bijective criteria)")
+                with preview_mode2:
+                    st.markdown("#### Raw Values")
+                    display_format = st.radio("Display Format:", ["Decimal", "Hexadecimal", "Binary"], horizontal=True)
+                    df = pd.DataFrame(st.session_state.sbox)
+                    df.index = [f"Row {i}" for i in range(16)]
+                    df.columns = [f"Col {i}" for i in range(16)]
+                    
+                    if display_format == "Hexadecimal": df_display = df.applymap(lambda x: f"{x:02X}")
+                    elif display_format == "Binary": df_display = df.applymap(lambda x: f"{x:08b}")
+                    else: df_display = df
+                    st.dataframe(df_display, use_container_width=True, height=400)
+
+                st.markdown("---")
+                if st.button("Run Quick Validation Check", use_container_width=True):
+                     validate_sbox_action()
             else:
-                st.error("❌ S-box is INVALID")
-            
-            # Display results
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("#### Balance Test")
-                if results['balanced']:
-                    st.success("✅ PASS")
-                else:
-                    st.error("✗ FAIL")
-                
-                # Balance details
-                balance_df = pd.DataFrame([
-                    {
-                        'Bit': f'f{i}',
-                        'Zeros': results['balance_details'][f'f{i}']['zeros'],
-                        'Ones': results['balance_details'][f'f{i}']['ones'],
-                        'Balanced': '✓' if results['balance_details'][f'f{i}']['balanced'] else '✗'
-                    }
-                    for i in range(8)
-                ])
-                st.dataframe(balance_df, use_container_width=True, hide_index=True)
-            
-            with col2:
-                st.markdown("#### Bijective Test")
-                if results['bijective']:
-                    st.success("✅ PASS")
-                else:
-                    st.error("✗ FAIL")
-                
-                bij_details = results['bijective_details']
-                st.write(f"**Unique values:** {bij_details['unique_count']}/256")
-                st.write(f"**In range [0,255]:** {'Yes' if bij_details['in_range'] else 'No'}")
+                st.info("Initiate construction to visualize the S-box matrix.")
 
-def show_phase2_testing():
-    """Phase 2: Cryptographic Testing"""
-    st.markdown('<div class="sub-header">🔷 Phase 2: Cryptographic Strength Testing</div>', unsafe_allow_html=True)
-    
-    if st.session_state.sbox is None:
-        st.warning("⚠️ No S-box loaded. Please construct one in Phase 1.")
-        return
-    
-    st.info(f"Testing: **{st.session_state.sbox_name}**")
-    
-    # Test options
-    col1, col2 = st.columns([3, 1])
-    
-    with col1:
-        test_selection = st.multiselect(
-            "Select Tests to Run:",
-            ["NL", "SAC", "BIC-NL", "BIC-SAC", "LAP", "DAP", "DU", "AD", "TO", "CI"],
-            default=["NL", "SAC", "BIC-NL", "BIC-SAC", "LAP", "DAP"]
-        )
-    
-    with col2:
-        st.markdown("#### Quick Select")
-        if st.button("Select All"):
-            test_selection = ["NL", "SAC", "BIC-NL", "BIC-SAC", "LAP", "DAP", "DU", "AD", "TO", "CI"]
-        if st.button("Core Tests"):
-            test_selection = ["NL", "SAC", "BIC-NL", "BIC-SAC", "LAP", "DAP"]
-    
-    if st.button("🧪 Run Selected Tests", type="primary", use_container_width=True):
-        with st.spinner("Running cryptographic tests... This may take a few minutes."):
-            tester = SBoxCryptoTest(st.session_state.sbox)
+    # --- TAB 2: LAB ---
+    with tab_lab:
+        if st.session_state.sbox is None:
+            st.warning("⚠️ No S-box to analyze.")
+        else:
+            st.markdown("### 🔬 Cryptographic Analysis")
+            with st.expander("🧪 Test Parameters", expanded=True):
+                col_sel, col_act = st.columns([3, 1])
+                with col_sel:
+                    test_selection = st.multiselect("Select Metrics:",
+                        ["NL", "SAC", "BIC-NL", "BIC-SAC", "LAP", "DAP", "DU", "AD", "TO", "CI"],
+                        default=["NL", "SAC", "BIC-NL", "BIC-SAC", "LAP", "DAP"])
+                with col_act:
+                    if st.button("Run Analysis", type="primary", use_container_width=True):
+                        run_tests_action(test_selection)
+
+            if st.session_state.test_results:
+                st.markdown("#### 📊 Analysis Report")
+                results = st.session_state.test_results
+                m1, m2, m3, m4 = st.columns(4)
+                if 'NL' in results: m1.metric("Nonlinearity", f"{results['NL'][0]}", delta="Max 112", delta_color="off")
+                if 'SAC' in results: m2.metric("SAC", f"{results['SAC'][0]:.4f}", delta=f"{results['SAC'][0]-0.5:.4f}", delta_color="inverse")
+                if 'BIC_SAC' in results: m3.metric("BIC-SAC", f"{results['BIC_SAC'][0]:.4f}", delta="Ideal 0.5", delta_color="off")
+                if 'DU' in results: m4.metric("Diff. Uniformity", f"{results['DU'][0]}", delta="Ideal 4", delta_color="inverse")
+
+                st.markdown("#### 📑 Detailed Metrics")
+                summary_data = []
+                for test_name, (value, details) in results.items():
+                    summary_data.append({
+                        'Test': test_name,
+                        'Value': f"{value:.5f}" if isinstance(value, float) else str(value),
+                        'Ideal': details.get('ideal', 'N/A'),
+                        'Score': f"{details.get('score', 0):.2f}%"
+                    })
+                st.dataframe(pd.DataFrame(summary_data), use_container_width=True, hide_index=True)
+
+    # --- TAB 3: VAULT (ENCRYPTION & ANALYSIS) ---
+    with tab_vault:
+        if st.session_state.sbox is None:
+            st.warning("⚠️ Encryption Engine offline. Load an S-box first.")
+        else:
+            col_text, col_img = st.columns(2, gap="medium")
             
-            results = {}
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-            
-            test_map = {
-                'NL': tester.test_nonlinearity,
-                'SAC': tester.test_sac,
-                'BIC-NL': tester.test_bic_nl,
-                'BIC-SAC': tester.test_bic_sac,
-                'LAP': tester.test_lap,
-                'DAP': tester.test_dap,
-                'DU': tester.test_differential_uniformity,
-                'AD': tester.test_algebraic_degree,
-                'TO': tester.test_transparency_order,
-                'CI': tester.test_confusion_index
-            }
-            
-            for i, test_name in enumerate(test_selection):
-                status_text.text(f"Running {test_name}...")
-                results[test_name] = test_map[test_name]()
-                progress_bar.progress((i + 1) / len(test_selection))
-            
-            st.session_state.test_results = results
-            status_text.text("✅ All tests completed!")
-        
-        st.success("✅ Testing completed!")
-        st.rerun()
-    
-    # Display results
-    if st.session_state.test_results:
-        st.markdown("---")
-        st.markdown("### 📊 Test Results")
-        
-        # Summary table
-        summary_data = []
-        for test_name, (value, details) in st.session_state.test_results.items():
-            summary_data.append({
-                'Test': test_name,
-                'Value': f"{value:.5f}" if isinstance(value, float) else str(value),
-                'Ideal': details.get('ideal', 'N/A'),
-                'Score': f"{details.get('score', 0):.2f}%"
-            })
-        
-        summary_df = pd.DataFrame(summary_data)
-        st.dataframe(summary_df, use_container_width=True, hide_index=True)
-        
-        # Detailed views
-        st.markdown("### 📈 Detailed Results")
-        
-        selected_test = st.selectbox("Select test for details:", list(st.session_state.test_results.keys()))
-        
-        value, details = st.session_state.test_results[selected_test]
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.metric("Value", f"{value:.5f}" if isinstance(value, float) else str(value))
-            st.metric("Ideal", details.get('ideal', 'N/A'))
-        
-        with col2:
-            st.metric("Score", f"{details.get('score', 0):.2f}%")
-            st.metric("Deviation", f"{details.get('deviation_from_ideal', 0):.5f}" if 'deviation_from_ideal' in details else "N/A")
-        
-        # Matrix visualizations
-        if 'matrix' in details:
-            st.markdown("#### Matrix Visualization")
-            matrix = np.array(details['matrix'])
-            
-            # Replace None with NaN for visualization
-            if matrix.dtype == object:
-                matrix_clean = np.zeros_like(matrix, dtype=float)
-                for i in range(matrix.shape[0]):
-                    for j in range(matrix.shape[1]):
-                        if matrix[i, j] is None:
-                            matrix_clean[i, j] = np.nan
+            # --- TEXT ENCRYPTION SECTION ---
+            with col_text:
+                st.markdown('<div class="content-card">', unsafe_allow_html=True)
+                st.subheader("📝 Text Cipher & Analysis")
+                
+                aes_mode_t = st.selectbox("AES Mode:", ["ECB", "CBC"], key="text_mode")
+                password_t = st.text_input("Security Key:", type="password", key="text_pass")
+                
+                tt1, tt2, tt3 = st.tabs(["Lock", "Unlock", "📊 Analyze"])
+                
+                with tt1:
+                    txt_in = st.text_area("Plaintext:", height=100)
+                    if st.button("Encrypt Text", use_container_width=True):
+                        text_encrypt_action(txt_in, password_t, aes_mode_t)
+                
+                with tt2:
+                    cipher_in = st.text_area("Ciphertext (Hex):", height=100, 
+                                           value=st.session_state.encrypted_text if st.session_state.encrypted_text else "")
+                    if st.button("Decrypt Text", use_container_width=True):
+                        text_decrypt_action(cipher_in, password_t, aes_mode_t)
+
+                with tt3:
+                    st.markdown("##### Text Security Metrics")
+                    if st.session_state.encrypted_text:
+                        ct_bytes = bytes.fromhex(st.session_state.encrypted_text)
+                        entropy = EncryptionStats.calculate_entropy(ct_bytes)
+                        st.metric("Ciphertext Entropy", f"{entropy:.4f}", delta="Ideal 8.0")
+                        
+                        st.markdown("---")
+                        st.markdown("**Avalanche Effect Test**")
+                        mod_char = st.text_input("Change 1st char of plaintext:", max_chars=1, value="X")
+                        if st.button("Run Avalanche Test"):
+                            if txt_in and password_t:
+                                key = generate_key_from_password(password_t)
+                                cipher = AESCipher(st.session_state.sbox, key, mode=aes_mode_t)
+                                c1 = cipher.encrypt(txt_in.encode('utf-8'))
+                                mod_text = mod_char + txt_in[1:]
+                                c2 = cipher.encrypt(mod_text.encode('utf-8'))
+                                av_score = EncryptionStats.calculate_avalanche_text(c1, c2)
+                                st.metric("Avalanche Effect", f"{av_score:.2f}%", delta="Ideal 50%")
+                            else:
+                                st.error("Plaintext/Password missing")
+                    else:
+                        st.info("Encrypt text first.")
+                st.markdown('</div>', unsafe_allow_html=True)
+
+# --- IMAGE ENCRYPTION SECTION (FIXED) ---
+            with col_img:
+                st.markdown('<div class="content-card">', unsafe_allow_html=True)
+                st.subheader("🖼️ Image Cipher & Analysis")
+                st.info("Max 1MB")
+                
+                # [FIX 1] Tambahkan Pilihan Mode untuk Gambar
+                col_img_pass, col_img_mode = st.columns([2, 1])
+                with col_img_pass:
+                    img_pass = st.text_input("Security Key:", type="password", key="img_pass")
+                with col_img_mode:
+                    img_mode = st.selectbox("Mode:", ["ECB", "CBC"], key="img_aes_mode")
+                
+                it1, it2, it3 = st.tabs(["Lock", "Unlock", "📊 Analyze"])
+                
+                with it1:
+                    img_file = st.file_uploader("Upload Image:", type=['png', 'jpg'], key="img_up")
+                    if img_file and st.button("Encrypt Image", use_container_width=True):
+                        # [FIX 2] Gunakan img_mode yang dipilih user, bukan hardcode 'ECB'
+                        if not img_pass: 
+                            st.warning("Password required")
                         else:
-                            matrix_clean[i, j] = float(matrix[i, j])
-                matrix = matrix_clean
-            
-            fig = go.Figure(data=go.Heatmap(
-                z=matrix,
-                colorscale='RdYlGn',
-                text=matrix,
-                texttemplate='%{text:.3f}',
-                textfont={"size": 10}
-            ))
-            fig.update_layout(
-                title=f"{selected_test} Matrix",
-                xaxis_title="Bit",
-                yaxis_title="Bit",
-                height=500
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-def show_phase3_io():
-    """Phase 3: Import/Export"""
-    st.markdown('<div class="sub-header">🔷 Phase 3: Import/Export</div>', unsafe_allow_html=True)
-    
-    tab1, tab2 = st.tabs(["📥 Export", "📤 Import"])
-    
-    with tab1:
-        st.markdown("### 📥 Export S-box")
-        
-        if st.session_state.sbox is None:
-            st.warning("⚠️ No S-box loaded. Please construct one first.")
-            return
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            export_format = st.selectbox(
-                "Export Format:",
-                ["Excel (.xlsx)", "CSV (.csv)", "Text (.txt)"]
-            )
-        
-        with col2:
-            number_format = st.selectbox(
-                "Number Format:",
-                ["Decimal", "Binary", "Hexadecimal"]
-            )
-        
-        if st.button("💾 Generate Export File", type="primary"):
-            try:
-                if export_format == "Excel (.xlsx)":
-                    formats = [number_format.lower()]
-                    file_data = SBoxIO.export_to_excel(
-                        st.session_state.sbox,
-                        f"{st.session_state.sbox_name}.xlsx",
-                        include_formats=formats
-                    )
-                    file_name = f"{st.session_state.sbox_name.replace(' ', '_')}.xlsx"
-                    mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                
-                elif export_format == "CSV (.csv)":
-                    file_data = SBoxIO.export_to_csv(st.session_state.sbox, number_format.lower()).encode()
-                    file_name = f"{st.session_state.sbox_name.replace(' ', '_')}.csv"
-                    mime_type = "text/csv"
-                
-                else:  # Text
-                    file_data = SBoxIO.export_to_txt(st.session_state.sbox, number_format.lower()).encode()
-                    file_name = f"{st.session_state.sbox_name.replace(' ', '_')}.txt"
-                    mime_type = "text/plain"
-                
-                st.download_button(
-                    label="⬇️ Download File",
-                    data=file_data,
-                    file_name=file_name,
-                    mime=mime_type,
-                    use_container_width=True
-                )
-                
-                st.success(f"✅ Export file ready for download!")
-                
-            except Exception as e:
-                st.error(f"❌ Export failed: {str(e)}")
-    
-    with tab2:
-        st.markdown("### 📤 Import S-box")
-        
-        uploaded_file = st.file_uploader(
-            "Choose a file",
-            type=['xlsx', 'csv', 'txt'],
-            help="Upload S-box file in Excel, CSV, or Text format"
-        )
-        
-        if uploaded_file is not None:
-            file_type = uploaded_file.name.split('.')[-1].lower()
-            
-            try:
-                if file_type == 'xlsx':
-                    file_content = uploaded_file.read()
-                    success, sbox, message = SBoxIO.import_from_excel(file_content)
-                
-                elif file_type == 'csv':
-                    file_content = uploaded_file.read().decode()
-                    success, sbox, message = SBoxIO.import_from_csv(file_content)
-                
-                else:  # txt
-                    file_content = uploaded_file.read().decode()
-                    success, sbox, message = SBoxIO.import_from_txt(file_content)
-                
-                if success:
-                    st.session_state.sbox = sbox
-                    st.session_state.sbox_name = f"Imported: {uploaded_file.name}"
-                    st.success(f"✅ S-box imported successfully!")
-                    st.rerun()
-                else:
-                    st.error(f"❌ Import failed: {message}")
-                    
-            except Exception as e:
-                st.error(f"❌ Error reading file: {str(e)}")
-
-def show_phase4_encryption():
-    """Phase 4: AES Encryption/Decryption (NEW!)"""
-    st.markdown('<div class="sub-header">🔷 Phase 4: AES Encryption/Decryption</div>', unsafe_allow_html=True)
-    
-    if st.session_state.sbox is None:
-        st.warning("⚠️ No S-box loaded. Please construct one in Phase 1 first.")
-        st.info("💡 The S-box will be used for AES SubBytes transformation.")
-        return
-    
-    st.success(f"✅ Using S-box: **{st.session_state.sbox_name}**")
-    
-    # Main tabs
-    tab1, tab2, tab3 = st.tabs(["📝 Text Encryption", "🖼️ Image Encryption (Soon)", "ℹ️ About AES"])
-    
-    with tab1:
-        show_text_encryption()
-    
-    with tab2:
-        print("Coming Soon")
-    
-    with tab3:
-        show_aes_info()
-
-def show_text_encryption():
-    """Text encryption/decryption interface"""
-    st.markdown("### 📝 Text Encryption/Decryption")
-    
-    st.markdown("""
-    <div class="info-box">
-    <b>How it works:</b> Your text will be encrypted using AES-128 with the custom S-box.
-    The same password must be used for encryption and decryption.
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Encryption/Decryption mode
-    mode_selection = st.radio(
-        "Select Mode:",
-        ["🔒 Encrypt", "🔓 Decrypt"],
-        horizontal=True
-    )
-    
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        password = st.text_input(
-            "Password (for key generation):",
-            type="password",
-            help="16-byte key will be derived from this password using SHA-256"
-        )
-    
-    with col2:
-        aes_mode = st.selectbox(
-            "AES Mode:",
-            ["ECB", "CBC"],
-            help="ECB: Electronic Codebook, CBC: Cipher Block Chaining"
-        )
-    
-    if mode_selection == "🔒 Encrypt":
-        st.markdown("#### Input Message")
-        plaintext = st.text_area(
-            "Enter text to encrypt:",
-            height=150,
-            placeholder="Type your secret message here..."
-        )
-        
-        if st.button("🔒 Encrypt Message", type="primary", use_container_width=True):
-            if not plaintext:
-                st.warning("⚠️ Please enter some text to encrypt.")
-            elif not password:
-                st.warning("⚠️ Please enter a password.")
-            else:
-                try:
-                    # Generate key
-                    key = generate_key_from_password(password)
-                    
-                    # Create cipher
-                    cipher = AESCipher(st.session_state.sbox, key, mode=aes_mode)
-                    
-                    # Encrypt
-                    ciphertext = cipher.encrypt(plaintext.encode('utf-8'))
-                    ciphertext_hex = ciphertext.hex()
-                    
-                    st.session_state.encrypted_text = ciphertext_hex
-                    
-                    st.success("✅ Encryption successful!")
-                    
-                    # Display results
-                    st.markdown("#### Encrypted Result")
-                    st.code(ciphertext_hex, language=None)
-                    
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("Original Size", f"{len(plaintext)} bytes")
-                    with col2:
-                        st.metric("Encrypted Size", f"{len(ciphertext)} bytes")
-                    with col3:
-                        st.metric("Hex Length", f"{len(ciphertext_hex)} chars")
-                    
-                    # Download button
-                    st.download_button(
-                        label="⬇️ Download Encrypted (HEX)",
-                        data=ciphertext_hex,
-                        file_name="encrypted_message.txt",
-                        mime="text/plain"
-                    )
-                    
-                except Exception as e:
-                    st.error(f"❌ Encryption failed: {str(e)}")
-    
-    else:  # Decrypt mode
-        st.markdown("#### Encrypted Message")
-        ciphertext_hex = st.text_area(
-            "Enter encrypted text (HEX format):",
-            height=150,
-            value=st.session_state.encrypted_text if st.session_state.encrypted_text else "",
-            placeholder="Paste encrypted hex string here..."
-        )
-        
-        if st.button("🔓 Decrypt Message", type="primary", use_container_width=True):
-            if not ciphertext_hex:
-                st.warning("⚠️ Please enter encrypted text to decrypt.")
-            elif not password:
-                st.warning("⚠️ Please enter the password used for encryption.")
-            else:
-                try:
-                    # Convert hex to bytes
-                    ciphertext = bytes.fromhex(ciphertext_hex.strip())
-                    
-                    # Generate key
-                    key = generate_key_from_password(password)
-                    
-                    # Create cipher
-                    cipher = AESCipher(st.session_state.sbox, key, mode=aes_mode)
-                    
-                    # Decrypt
-                    plaintext_bytes = cipher.decrypt(ciphertext)
-                    plaintext = plaintext_bytes.decode('utf-8')
-                    
-                    st.success("✅ Decryption successful!")
-                    
-                    # Display results
-                    st.markdown("#### Decrypted Message")
-                    st.text_area("Result:", value=plaintext, height=150, disabled=True)
-                    
-                    st.metric("Message Length", f"{len(plaintext)} characters")
-                    
-                except Exception as e:
-                    st.error(f"❌ Decryption failed: {str(e)}")
-                    st.info("💡 Make sure you're using the correct password and AES mode.")
-
-def show_image_encryption():
-    """Image encryption/decryption interface"""
-    st.markdown("### 🖼️ Image Encryption/Decryption")
-    
-    st.markdown("""
-    <div class="warning-box">
-    <b>⚠️ Note:</b> Image encryption is experimental. Works best with small images (< 1MB).
-    Large images may take significant time to process.
-    </div>
-    """, unsafe_allow_html=True)
-    
-    mode_selection = st.radio(
-        "Select Mode:",
-        ["🔒 Encrypt Image", "🔓 Decrypt Image"],
-        horizontal=True,
-        key="image_mode"
-    )
-    
-    password = st.text_input(
-        "Password:",
-        type="password",
-        key="image_password",
-        help="Use the same password for encryption and decryption"
-    )
-    
-    if mode_selection == "🔒 Encrypt Image":
-        uploaded_file = st.file_uploader(
-            "Choose an image to encrypt:",
-            type=['png', 'jpg', 'jpeg', 'bmp'],
-            key="encrypt_upload"
-        )
-        
-        if uploaded_file is not None:
-            # Display original image
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("#### Original Image")
-                image = Image.open(uploaded_file)
-                st.image(image, use_column_width=True)
-                st.caption(f"Size: {image.size[0]}x{image.size[1]} pixels")
-            
-            if st.button("🔒 Encrypt Image", type="primary", use_container_width=True):
-                if not password:
-                    st.warning("⚠️ Please enter a password.")
-                else:
-                    try:
-                        with st.spinner("Encrypting image... This may take a moment."):
-                            # Convert image to array
-                            img_array = np.array(image)
-                            
-                            # Generate key
-                            key = generate_key_from_password(password)
-                            
-                            # Create cipher
-                            image_cipher = AESImageCipher(st.session_state.sbox, key, mode='ECB')
-                            
-                            # Encrypt (returns bytes now)
-                            encrypted_bytes, metadata = image_cipher.encrypt_image(img_array)
-                            
-                            # Store in session
-                            st.session_state.encrypted_image = {
-                                'bytes': encrypted_bytes,
-                                'metadata': metadata
-                            }
-                        
-                        st.success("✅ Image encrypted successfully!")
-                        
-                        with col2:
-                            st.markdown("#### Encrypted Data")
-                            st.metric("Encrypted Size", f"{len(encrypted_bytes)} bytes")
-                            st.metric("Original Size", f"{metadata['data_length']} bytes")
-                            
-                            # Create visual representation (random-looking image)
-                            enc_array = np.frombuffer(encrypted_bytes[:metadata['data_length']], dtype=np.uint8)
                             try:
-                                enc_img = enc_array.reshape(metadata['original_shape'])
-                                encrypted_img = Image.fromarray(enc_img.astype('uint8'))
-                                st.image(encrypted_img, caption="Visual representation", use_column_width=True)
-                            except:
-                                st.info("Visual representation not available (encrypted data)")
-                            
-                            # Download encrypted data
-                            st.download_button(
-                                label="⬇️ Download Encrypted Data",
-                                data=encrypted_bytes,
-                                file_name="encrypted_image.bin",
-                                mime="application/octet-stream"
-                            )
-                        
-                    except Exception as e:
-                        st.error(f"❌ Encryption failed: {str(e)}")
-    
-    else:  # Decrypt mode
-        if st.session_state.encrypted_image is not None:
-            st.info("ℹ️ Using encrypted image from current session")
-            
-            if st.button("🔓 Decrypt Image", type="primary", use_container_width=True):
-                if not password:
-                    st.warning("⚠️ Please enter the password used for encryption.")
-                else:
-                    try:
-                        with st.spinner("Decrypting image..."):
-                            # Get encrypted data
-                            encrypted_bytes = st.session_state.encrypted_image['bytes']
-                            metadata = st.session_state.encrypted_image['metadata']
-                            
-                            # Generate key
-                            key = generate_key_from_password(password)
-                            
-                            # Create cipher
-                            image_cipher = AESImageCipher(st.session_state.sbox, key, mode='ECB')
-                            
-                            # Decrypt
-                            decrypted_array = image_cipher.decrypt_image(encrypted_bytes, metadata)
-                        
-                        st.success("✅ Image decrypted successfully!")
-                        
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            st.markdown("#### Encrypted (Visual)")
-                            # Show visual representation
-                            enc_array = np.frombuffer(encrypted_bytes[:metadata['data_length']], dtype=np.uint8)
+                                img = Image.open(img_file)
+                                img_arr = np.array(img)
+                                key = generate_key_from_password(img_pass)
+                                # Gunakan img_mode disini
+                                cipher = AESImageCipher(st.session_state.sbox, key, mode=img_mode)
+                                enc_bytes, meta = cipher.encrypt_image(img_arr)
+                                st.session_state.encrypted_image = {'bytes': enc_bytes, 'metadata': meta}
+                                st.success(f"Image encrypted in {img_mode} mode ({len(enc_bytes)} bytes)")
+                            except Exception as e: 
+                                st.error(str(e))
+                
+                with it2:
+                    if st.session_state.encrypted_image:
+                        if st.button("Decrypt Current Image", use_container_width=True):
                             try:
-                                enc_img = enc_array.reshape(metadata['original_shape'])
-                                encrypted_img = Image.fromarray(enc_img.astype('uint8'))
-                                st.image(encrypted_img, use_column_width=True)
-                            except:
-                                st.info("Visual not available")
+                                data = st.session_state.encrypted_image
+                                key = generate_key_from_password(img_pass)
+                                # Gunakan img_mode disini juga
+                                cipher = AESImageCipher(st.session_state.sbox, key, mode=img_mode)
+                                dec_arr = cipher.decrypt_image(data['bytes'], data['metadata'])
+                                st.image(Image.fromarray(dec_arr.astype('uint8')), caption="Decrypted Result")
+                            except Exception as e: 
+                                st.error(f"Failed: {str(e)}")
+                    else:
+                        st.info("Encrypt an image first.")
                         
-                        with col2:
-                            st.markdown("#### Decrypted Image")
-                            decrypted_img = Image.fromarray(decrypted_array.astype('uint8'))
-                            st.image(decrypted_img, use_column_width=True)
-                            
-                            # Download decrypted
-                            buf = BytesIO()
-                            decrypted_img.save(buf, format='PNG')
-                            st.download_button(
-                                label="⬇️ Download Decrypted Image",
-                                data=buf.getvalue(),
-                                file_name="decrypted_image.png",
-                                mime="image/png"
-                            )
+                with it3:
+                    if st.session_state.encrypted_image:
+                        enc_bytes = st.session_state.encrypted_image['bytes']
                         
-                    except Exception as e:
-                        st.error(f"❌ Decryption failed: {str(e)}")
-                        st.info("💡 Make sure you're using the correct password.")
-        else:
-            st.info("ℹ️ No encrypted image in session. Please encrypt an image first.")
+                        st.markdown("##### 1. Histogram Analysis")
+                        if st.button("Show Histogram"):
+                            hist_data = EncryptionStats.calculate_histogram(enc_bytes)
+                            fig = go.Figure(data=[go.Bar(y=hist_data)])
+                            fig.update_layout(title="Cipherimage Histogram", height=300, margin=dict(l=0, r=0, t=30, b=0))
+                            st.plotly_chart(fig, use_container_width=True)
 
-def show_aes_info():
-    """Display information about AES"""
-    st.markdown("### ℹ️ About AES with Custom S-box")
-    
-    st.markdown("""
-    ## Advanced Encryption Standard (AES)
-    
-    AES is a symmetric block cipher that encrypts data in 128-bit blocks using keys of 128, 192, or 256 bits.
-    This implementation uses **AES-128** with a **custom S-box**.
-    
-    ### 🔧 AES Structure
-    
-    AES consists of several rounds of transformations:
-    
-    1. **SubBytes** - Non-linear substitution using S-box (🔥 CUSTOM!)
-    2. **ShiftRows** - Circular shift of rows
-    3. **MixColumns** - Linear mixing of columns
-    4. **AddRoundKey** - XOR with round key
-    
-    ### 🎯 Custom S-box Integration
-    
-    The **SubBytes** transformation uses your custom S-box instead of the standard AES S-box.
-    This means:
-    
-    - ✅ Different diffusion properties
-    - ✅ Potentially stronger against specific attacks
-    - ✅ Unique encryption based on S-box choice
-    
-    ### 📊 Encryption Modes
-    
-    **ECB (Electronic Codebook)**
-    - Each block encrypted independently
-    - Fast and parallelizable
-    - ⚠️ Same plaintext → same ciphertext
-    
-    **CBC (Cipher Block Chaining)**
-    - Each block XORed with previous ciphertext
-    - Sequential processing
-    - ✅ Same plaintext → different ciphertext
-    
-    ### 🔐 Security Recommendations
-    
-    1. **Use strong passwords** (at least 12 characters)
-    2. **Use CBC mode** for better security
-    3. **Keep your S-box secret** if used in production
-    4. **Test S-box strength** in Phase 2 before use
-    
-    ### 📚 Implementation Details
-    
-    - **Algorithm**: AES-128
-    - **Block Size**: 128 bits (16 bytes)
-    - **Key Size**: 128 bits (derived from password)
-    - **Rounds**: 10
-    - **Padding**: PKCS7
-    - **S-box**: Custom (from Phase 1)
-    
-    ### ⚡ Performance Notes
-    
-    - Text encryption: Very fast
-    - Image encryption: Slower (depends on size)
-    - Recommended max image size: 1MB
-    """)
-    
-    # Show current S-box info
-    st.markdown("---")
-    st.markdown("### 📋 Current S-box Info")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.metric("S-box Name", st.session_state.sbox_name)
-    
-    with col2:
-        if st.session_state.test_results and 'NL' in st.session_state.test_results:
-            nl_value = st.session_state.test_results['NL'][0]
-            st.metric("Nonlinearity", nl_value)
+                        st.markdown("##### 2. Entropy Analysis")
+                        entropy = EncryptionStats.calculate_entropy(enc_bytes)
+                        st.metric("Entropy Value", f"{entropy:.5f}", delta="Ideal ~8.0")
+                        
+                        st.markdown("##### 3. Differential Attack (NPCR & UACI)")
+                        st.caption(f"Testing with **{img_mode}** mode. (Use CBC for high scores)")
+                        
+                        if st.button("Run NPCR & UACI Test"):
+                            with st.spinner("Running differential analysis..."):
+                                try:
+                                    if img_file is not None:
+                                        img_file.seek(0)
+                                        arr_orig = np.array(Image.open(img_file))
+                                        
+                                        key = generate_key_from_password(img_pass)
+                                        
+                                        # [FIX 3] KRUSIAL: Gunakan Mode yang dipilih user (img_mode)
+                                        # Sebelumnya ini di-hardcode 'ECB', itulah sebabnya hasil Anda rendah
+                                        cipher = AESImageCipher(st.session_state.sbox, key, mode=img_mode)
+                                        
+                                        # 1. Enkripsi Gambar Asli
+                                        c1, _ = cipher.encrypt_image(arr_orig)
+                                        
+                                        # 2. Modifikasi 1 pixel (XOR Flip)
+                                        arr_mod = arr_orig.copy()
+                                        if len(arr_mod.shape) == 3: 
+                                            arr_mod[0,0,0] = arr_mod[0,0,0] ^ 1
+                                        else: 
+                                            arr_mod[0,0] = arr_mod[0,0] ^ 1
+                                            
+                                        # 3. Enkripsi Gambar Modifikasi
+                                        c2, _ = cipher.encrypt_image(arr_mod)
+                                        
+                                        # 4. Hitung Statistik
+                                        npcr = EncryptionStats.calculate_npcr(c1, c2)
+                                        uaci = EncryptionStats.calculate_uaci(c1, c2)
+                                        
+                                        c1_met, c2_met = st.columns(2)
+                                        with c1_met: 
+                                            st.metric("NPCR", f"{npcr:.4f}%", delta="Ideal >99.6%")
+                                        with c2_met: 
+                                            st.metric("UACI", f"{uaci:.4f}%", delta="Ideal ~33.4%")
+                                            
+                                        if img_mode == "ECB":
+                                            st.warning("⚠️ Low NPCR is expected in ECB mode. Switch to CBC for high security.")
+                                    else:
+                                        st.error("Re-upload original image.")
+                                except Exception as e:
+                                    st.error(f"Error: {str(e)}")
+                    else:
+                        st.info("Encrypt an image first.")
+                st.markdown('</div>', unsafe_allow_html=True)
+
+    # --- TAB 4: DATA ---
+    with tab_data:
+        col_ex, col_im = st.columns(2, gap="large")
+        with col_ex:
+            st.markdown("### 📤 Export Data")
+            with st.container(border=True):
+                if st.session_state.sbox is not None:
+                    fmt = st.selectbox("Format:", ["Excel (.xlsx)", "CSV (.csv)", "Text (.txt)"])
+                    num_fmt = st.radio("Encoding:", ["Decimal", "Hex", "Binary"], horizontal=True)
+                    if st.button("Generate Download Link"):
+                        export_action(fmt, num_fmt)
+                else:
+                    st.info("No data to export.")
+        with col_im:
+            st.markdown("### 📥 Import Data")
+            with st.container(border=True):
+                up_file = st.file_uploader("Upload S-box file:", type=['xlsx', 'csv', 'txt'])
+                if up_file: import_action(up_file)
+
+# ==========================================
+# 5. ACTION LOGIC
+# ==========================================
+def construct_sbox_action(matrix_opt, custom_mat_txt, const_opt, custom_const):
+    try:
+        constructor = SBoxConstructor()
+        if matrix_opt == "AES (Original)":
+            mat = PredefinedMatrices.get_aes_matrix(); name = "AES S-box"
+        elif matrix_opt == "Custom":
+            rows = custom_mat_txt.strip().split('\n')
+            mat = np.array([[int(x) for x in row.split()] for row in rows], dtype=np.uint8)
+            name = "Custom S-box"
         else:
-            st.metric("Nonlinearity", "Not tested")
-    
-    with col3:
-        if st.session_state.test_results and 'BIC_SAC' in st.session_state.test_results:
-            bic_sac = st.session_state.test_results['BIC_SAC'][0]
-            st.metric("BIC-SAC", f"{bic_sac:.5f}")
+            map_mat = {
+                "K4 (Paper)": PredefinedMatrices.get_k4(),
+                "K44 (Best - Paper)": PredefinedMatrices.get_k44(),
+                "K81 (Paper)": PredefinedMatrices.get_k81(),
+                "K111 (Paper)": PredefinedMatrices.get_k111(),
+                "K128 (Paper)": PredefinedMatrices.get_k128()
+            }
+            mat = map_mat[matrix_opt]
+            name = f"S-box {matrix_opt.split()[0]}"
+
+        if const_opt == "AES (0x63)": const = PredefinedMatrices.get_aes_constant()
+        else: const = np.array([[int(x) for x in custom_const]], dtype=np.uint8).T
+
+        sbox = constructor.construct_sbox(mat, const)
+        st.session_state.sbox = sbox
+        st.session_state.sbox_name = name
+        st.rerun()
+    except Exception as e: st.error(f"Construction Error: {str(e)}")
+
+def validate_sbox_action():
+    validator = SBoxValidator()
+    is_valid, results = validator.validate_sbox(st.session_state.sbox)
+    if is_valid: st.toast("✅ Valid!", icon="✅")
+    else: st.toast("❌ Invalid", icon="❌")
+    with st.expander("Validation Details"):
+        c1, c2 = st.columns(2)
+        c1.metric("Balanced", "PASS" if results['balanced'] else "FAIL")
+        c2.metric("Bijective", "PASS" if results['bijective'] else "FAIL")
+
+def run_tests_action(selection):
+    with st.spinner("Analyzing..."):
+        tester = SBoxCryptoTest(st.session_state.sbox)
+        results = {}
+        test_map = {
+            'NL': tester.test_nonlinearity, 'SAC': tester.test_sac,
+            'BIC-NL': tester.test_bic_nl, 'BIC-SAC': tester.test_bic_sac,
+            'LAP': tester.test_lap, 'DAP': tester.test_dap,
+            'DU': tester.test_differential_uniformity, 'AD': tester.test_algebraic_degree,
+            'TO': tester.test_transparency_order, 'CI': tester.test_confusion_index
+        }
+        for t in selection: results[t] = test_map[t]()
+        st.session_state.test_results = results
+        st.rerun()
+
+def text_encrypt_action(text, pwd, mode):
+    if not text or not pwd: st.warning("Required fields missing"); return
+    try:
+        key = generate_key_from_password(pwd)
+        cipher = AESCipher(st.session_state.sbox, key, mode=mode)
+        ct = cipher.encrypt(text.encode('utf-8'))
+        st.session_state.encrypted_text = ct.hex()
+        st.success("Encrypted!")
+    except Exception as e: st.error(str(e))
+
+def text_decrypt_action(hex_text, pwd, mode):
+    if not hex_text or not pwd: st.warning("Required fields missing"); return
+    try:
+        ct = bytes.fromhex(hex_text.strip())
+        key = generate_key_from_password(pwd)
+        cipher = AESCipher(st.session_state.sbox, key, mode=mode)
+        pt = cipher.decrypt(ct).decode('utf-8')
+        st.code(pt, language="text")
+    except Exception as e: st.error(f"Failed: {str(e)}")
+
+def image_encrypt_action(file, pwd):
+    if not pwd: st.warning("Password required"); return
+    try:
+        img = Image.open(file)
+        img_arr = np.array(img)
+        key = generate_key_from_password(pwd)
+        cipher = AESImageCipher(st.session_state.sbox, key, mode='ECB')
+        enc_bytes, meta = cipher.encrypt_image(img_arr)
+        st.session_state.encrypted_image = {'bytes': enc_bytes, 'metadata': meta}
+        st.success(f"Image encrypted ({len(enc_bytes)} bytes)")
+    except Exception as e: st.error(str(e))
+
+def image_decrypt_action(pwd):
+    try:
+        data = st.session_state.encrypted_image
+        key = generate_key_from_password(pwd)
+        cipher = AESImageCipher(st.session_state.sbox, key, mode='ECB')
+        dec_arr = cipher.decrypt_image(data['bytes'], data['metadata'])
+        st.image(Image.fromarray(dec_arr.astype('uint8')), caption="Decrypted Result")
+    except Exception as e: st.error(f"Failed: {str(e)}")
+
+def export_action(fmt, num_fmt):
+    try:
+        name = st.session_state.sbox_name.replace(" ", "_")
+        if "Excel" in fmt:
+            data = SBoxIO.export_to_excel(st.session_state.sbox, f"{name}.xlsx", [num_fmt.lower()])
+            mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            fname = f"{name}.xlsx"
+        elif "CSV" in fmt:
+            data = SBoxIO.export_to_csv(st.session_state.sbox, num_fmt.lower()).encode()
+            mime = "text/csv"; fname = f"{name}.csv"
         else:
-            st.metric("BIC-SAC", "Not tested")
+            data = SBoxIO.export_to_txt(st.session_state.sbox, num_fmt.lower()).encode()
+            mime = "text/plain"; fname = f"{name}.txt"
+        st.download_button("⬇️ Download", data, fname, mime)
+    except Exception as e: st.error(str(e))
+
+def import_action(file):
+    try:
+        ftype = file.name.split('.')[-1].lower()
+        content = file.read()
+        if ftype == 'xlsx': s, box, m = SBoxIO.import_from_excel(content)
+        elif ftype == 'csv': s, box, m = SBoxIO.import_from_csv(content.decode())
+        else: s, box, m = SBoxIO.import_from_txt(content.decode())
+        
+        if s:
+            st.session_state.sbox = box
+            st.session_state.sbox_name = f"Imported: {file.name}"
+            st.success("Import Successful!")
+            st.rerun()
+        else: st.error(m)
+    except Exception as e: st.error(str(e))
 
 if __name__ == "__main__":
     main()
