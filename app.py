@@ -115,7 +115,7 @@ def display_status_bar():
     else:
         st.markdown("""
         <div class="status-card" style="border-left: 5px solid #dc3545;">
-            <div><span style="font-size: 1.2rem; font-weight: bold; color: #dc3545;">⚠️ NO ENGINE LOADED</span></div>
+            <div><span style="font-size: 1.2rem; font-weight: bold; color: #dc3545;">⚠️ NO S-BOX LOADED</span></div>
             <div style="font-size: 0.9rem;">Please construct or import an S-box in the <b>Forge</b> tab.</div>
         </div>
         """, unsafe_allow_html=True)
