@@ -391,7 +391,7 @@ def main():
     with tab_data:
         col_ex, col_im = st.columns(2, gap="large")
         with col_ex:
-            st.markdown("### 📤 Export Data")
+            st.markdown("### 📤 Export S-box")
             with st.container(border=True):
                 if st.session_state.sbox is not None:
                     fmt = st.selectbox("Format:", ["Excel (.xlsx)", "CSV (.csv)", "Text (.txt)"])
@@ -401,7 +401,7 @@ def main():
                 else:
                     st.info("No data to export.")
         with col_im:
-            st.markdown("### 📥 Import Data")
+            st.markdown("### 📥 Import S-box")
             with st.container(border=True):
                 up_file = st.file_uploader("Upload S-box file:", type=['xlsx', 'csv', 'txt'])
                 if up_file: import_action(up_file)
